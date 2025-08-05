@@ -45,9 +45,11 @@ test_workflow_structure() {
     [[ -f "$workflow_file" ]] || { echo "Workflow file not found"; return 1; }
     
     # Validate YAML syntax
-    python3 -c "import yaml; yaml.safe_load(open('$workflow_file'))" 2>/dev/null || {
-        echo "Invalid YAML syntax"; return 1;
-    }
+    yaml_error=$(python3 -c "import yaml; yaml.safe_load(open('$workflow_file'))" 2>&1)
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}Invalid YAML syntax:${NC}\n$yaml_error"
+        return 1
+    fi
     
     # Check required sections
     local required_sections=("name" "on" "jobs" "permissions")
