@@ -39,6 +39,12 @@ show_help() {
 test_push_main() {
     echo -e "${BLUE}Testing push to main branch scenario...${NC}"
     
+    # Check for uncommitted changes to README.md
+    if [[ -n $(git status --porcelain README.md) ]]; then
+        echo -e "${RED}ERROR: README.md has uncommitted changes. Please commit or stash them before running this test.${NC}"
+        return 1
+    fi
+    
     # Create a test commit
     echo "# Test commit $(date)" >> README.md
     git add README.md
