@@ -47,7 +47,9 @@ test_workflow_structure() {
     # Validate YAML syntax
     yaml_error=$(python3 -c "import yaml; yaml.safe_load(open('$workflow_file'))" 2>&1)
     if [ $? -ne 0 ]; then
-        echo -e "${RED}Invalid YAML syntax:${NC}\n$yaml_error"
+        echo -e "${RED}YAML syntax validation failed for file '${workflow_file}'.${NC}"
+        echo -e "${YELLOW}Details:${NC}\n$yaml_error"
+        echo -e "${RED}Please check the workflow file for syntax errors and correct them before proceeding.${NC}"
         return 1
     fi
     
