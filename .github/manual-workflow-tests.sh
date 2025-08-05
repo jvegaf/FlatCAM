@@ -124,9 +124,10 @@ simulate_failure() {
     local branch_name="test-failure-$(date +%s)"
     git checkout -b "$branch_name"
     
-    # Break the Python syntax to cause build failure
-    echo "INTENTIONAL_SYNTAX_ERROR = " > FlatCAM/__init__.py
-    git add FlatCAM/__init__.py
+    # Create a temporary Python file with a syntax error to cause build failure
+    local failure_file="FlatCAM/intentional_failure.py"
+    echo "def this_will_fail(" > "$failure_file"
+    git add "$failure_file"
     git commit -m "Test: intentional failure for error handling validation"
     
     echo -e "${YELLOW}📋 Expected behavior:${NC}"
