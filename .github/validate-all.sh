@@ -46,7 +46,7 @@ run_test_suite "Component Validation Tests" "./.github/test-workflow-components.
 run_test_suite "Workflow Configuration Validation" "./.github/workflow-validation-tests.sh"
 
 # Test Suite 3: Manual Testing Setup Validation
-run_test_suite "Security Guidelines Display" "./.github/manual-workflow-tests.sh display-security-guidelines"
+run_test_suite "Security Guidelines Display" "./.github/manual-workflow-tests.sh security-scan"
 
 # Additional Quick Validations
 echo -e "${BLUE}📋 Running: Additional Quick Validations${NC}"
