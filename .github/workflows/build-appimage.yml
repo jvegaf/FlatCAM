@@ -91,12 +91,16 @@ jobs:
         run: |
           # Create the zip file needed for AppImage
           chmod +x publish/create_zipapp.sh
-          publish/create_zipapp.sh
+          publish/create_zipapp.sh "${{ steps.version.outputs.version }}"
+          
+          # Convert version for filename (dots and hyphens to underscores)
+          VERSION_FILENAME=$(echo "${{ steps.version.outputs.version }}" | sed 's/[.-]/_/g')
           
           # Verify the zip file was created
-          if [[ -f "_build/FlatCAM_2024_4.zip" ]]; then
+          if [[ -f "_build/FlatCAM_${VERSION_FILENAME}.zip" ]]; then
             echo "Source zip created successfully"
             ls -la _build/
+            echo "zip-filename=FlatCAM_${VERSION_FILENAME}.zip" >> $GITHUB_OUTPUT
           else
             echo "Failed to create source zip"
             exit 1
@@ -107,7 +111,7 @@ jobs:
         working-directory: publish/appimage
         run: |
           # Copy the source zip to the appimage directory
-          SOURCE_ZIP="../../_build/FlatCAM_${{ steps.version.outputs.version }}.zip"
+          SOURCE_ZIP="../../_build/${{ steps.prepare.outputs.zip-filename }}"
           cp "$SOURCE_ZIP" ./
           
           # Build the AppImage
@@ -163,7 +167,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download AppImage artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: FlatCAM-AppImage-${{ needs.build-appimage.outputs.version }}
           path: ./artifacts

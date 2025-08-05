@@ -2,7 +2,10 @@
 
 # zip -vr FlatCAM.zip *.py LICENSE appCommon/*/*.py appEditors/*/*.py appGUI/*/*.py appObjects/*/*.py appParsers/*/*.py appTools/*/*.py descartes/*/*.py locale/*/*.py preprocessors/*/*.py tclCommands/*/*.py
 
-VERSION="2024_4"
+# Accept version as parameter, fallback to default if not provided
+VERSION_RAW="${1:-2024_4}"
+# Convert dots and hyphens to underscores for filename compatibility
+VERSION=$(echo "$VERSION_RAW" | sed 's/[.-]/_/g')
 BUILD_PATH="_build"
 ZIPAPP_FILEPATH="$BUILD_PATH/FlatCAM_$VERSION.zip"
 FLATCAM_PATH="FlatCAM"
