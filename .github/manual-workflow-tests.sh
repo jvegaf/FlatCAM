@@ -132,7 +132,7 @@ simulate_failure() {
     
     # Create a temporary Python file with a syntax error to cause build failure
     local failure_file="FlatCAM/intentional_failure.py"
-    echo "def this_will_fail(" > "$failure_file"
+    echo "raise Exception('Intentional failure for error handling validation')" > "$failure_file"
     git add "$failure_file"
     git commit -m "Test: intentional failure for error handling validation"
     
