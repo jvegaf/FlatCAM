@@ -219,7 +219,7 @@ print('Build environment is properly configured')
 # Test 6: Version detection validation
 test_version_detection() {
     # Test version detection logic from pyproject.toml
-    local version=$(grep '^version' FlatCAM/pyproject.toml | sed -E 's/version = *["'\'']?([^"'\'' ]+)["'\'']?/\1/' || echo "")
+    local version=$(python3 -c "import tomllib; print(tomllib.load(open('FlatCAM/pyproject.toml', 'rb'))['project']['version'])" 2>/dev/null || echo "")
     
     [[ -n "$version" ]] || { echo "Cannot detect version from pyproject.toml"; return 1; }
     
