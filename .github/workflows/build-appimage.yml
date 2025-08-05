@@ -106,7 +106,8 @@ jobs:
         working-directory: publish/appimage
         run: |
           # Copy the source zip to the appimage directory
-          cp ../../_build/FlatCAM_2024_4.zip ./
+          SOURCE_ZIP="../../_build/FlatCAM_${{ steps.version.outputs.version }}.zip"
+          cp "$SOURCE_ZIP" ./
           
           # Build the AppImage
           export TARGET_APPDIR=AppDir
