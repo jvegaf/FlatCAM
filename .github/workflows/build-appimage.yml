@@ -47,7 +47,7 @@ jobs:
           if [[ $GITHUB_REF == refs/tags/v* ]]; then
             VERSION=${GITHUB_REF#refs/tags/v}
           else
-            VERSION=$(grep '^version' FlatCAM/pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+            VERSION=$(grep '^version' FlatCAM/pyproject.toml | sed -E 's/version = *["'\'']?([^"'\'' ]+)["'\'']?/\1/')
             if [[ -z "$VERSION" ]]; then
               VERSION="2024.4"
             fi
