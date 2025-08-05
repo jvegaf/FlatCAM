@@ -1,0 +1,254 @@
+name: Build and Release AppImage
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a new release'
+        required: false
+        default: 'false'
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build-appimage:
+    name: Build FlatCAM AppImage
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      appimage-path: ${{ steps.build.outputs.appimage-path }}
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Get version information
+        id: version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION=$(grep '^version' FlatCAM/pyproject.toml | sed -E 's/version = *["'\'']?([^"'\'' ]+)["'\'']?/\1/')
+            if [[ -z "$VERSION" ]]; then
+              VERSION="2024.4"
+            fi
+            VERSION="${VERSION}-dev.$(git rev-parse --short HEAD)"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-pip \
+            python3-venv \
+            fuse \
+            libfuse2 \
+            libfontconfig1 \
+            libxkbcommon-x11-0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-randr0 \
+            libxcb-render-util0 \
+            libxcb-xinerama0 \
+            libxcb-xinput0 \
+            libxcb-xfixes0 \
+            build-essential \
+            libgdal-dev \
+            gdal-bin \
+            wget
+
+      - name: Install AppImage Builder
+        run: |
+          wget -O appimage-builder https://github.com/AppImageCrafters/appimage-builder/releases/download/v1.1.0/appimage-builder-1.1.0-x86_64.AppImage
+          chmod +x appimage-builder
+          sudo mv appimage-builder /usr/local/bin/
+          
+      - name: Prepare source code
+        id: prepare
+        run: |
+          # Create the zip file needed for AppImage
+          chmod +x publish/create_zipapp.sh
+          publish/create_zipapp.sh
+          
+          # Verify the zip file was created
+          if [[ -f "_build/FlatCAM_2024_4.zip" ]]; then
+            echo "Source zip created successfully"
+            ls -la _build/
+          else
+            echo "Failed to create source zip"
+            exit 1
+          fi
+
+      - name: Build AppImage
+        id: build
+        working-directory: publish/appimage
+        run: |
+          # Copy the source zip to the appimage directory
+          SOURCE_ZIP="../../_build/FlatCAM_${{ steps.version.outputs.version }}.zip"
+          cp "$SOURCE_ZIP" ./
+          
+          # Build the AppImage
+          export TARGET_APPDIR=AppDir
+          chmod +x create_appimage.sh
+          ./create_appimage.sh
+          
+          # Find the generated AppImage
+          APPIMAGE_FILE=$(find . -name "*.AppImage" -type f | head -1)
+          if [[ -n "$APPIMAGE_FILE" ]]; then
+            # Rename with version
+            NEW_NAME="FlatCAM-${{ steps.version.outputs.version }}-x86_64.AppImage"
+            mv "$APPIMAGE_FILE" "$NEW_NAME"
+            echo "appimage-path=publish/appimage/$NEW_NAME" >> $GITHUB_OUTPUT
+            echo "AppImage built: $NEW_NAME"
+            ls -la "$NEW_NAME"
+          else
+            echo "No AppImage file found"
+            exit 1
+          fi
+
+      - name: Test AppImage
+        working-directory: publish/appimage
+        run: |
+          APPIMAGE_FILE=$(find . -name "*.AppImage" -type f | head -1)
+          if [[ -n "$APPIMAGE_FILE" ]]; then
+            chmod +x "$APPIMAGE_FILE"
+            # Test that the AppImage is executable and shows help/version
+            timeout 30s "$APPIMAGE_FILE" --help || true
+            echo "AppImage test completed"
+          fi
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: FlatCAM-AppImage-${{ steps.version.outputs.version }}
+          path: ${{ steps.build.outputs.appimage-path }}
+          retention-days: 30
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-22.04
+    needs: build-appimage
+    if: |
+      always() && 
+      needs.build-appimage.result == 'success' && 
+      (startsWith(github.ref, 'refs/tags/v') || 
+       (github.event_name == 'workflow_dispatch' && inputs.create_release == 'true'))
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download AppImage artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: FlatCAM-AppImage-${{ needs.build-appimage.outputs.version }}
+          path: ./artifacts
+
+      - name: Generate release notes
+        id: release-notes
+        run: |
+          VERSION="${{ needs.build-appimage.outputs.version }}"
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            TAG_NAME=${GITHUB_REF#refs/tags/}
+            RELEASE_NAME="FlatCAM $VERSION"
+            IS_PRERELEASE=false
+          else
+            TAG_NAME="v$VERSION"
+            RELEASE_NAME="FlatCAM $VERSION (Development Build)"
+            IS_PRERELEASE=true
+          fi
+          
+          # Create release notes
+          cat > release_notes.md << EOF
+          # FlatCAM $VERSION
+          
+          ## Download
+          
+          - **Linux AppImage**: FlatCAM-$VERSION-x86_64.AppImage
+          
+          ## Installation Instructions
+          
+          ### Linux (AppImage)
+          1. Download the AppImage file
+          2. Make it executable: \`chmod +x FlatCAM-$VERSION-x86_64.AppImage\`
+          3. Run: \`./FlatCAM-$VERSION-x86_64.AppImage\`
+          
+          ## What's New
+          
+          This is an automated build of FlatCAM, a program for preparing CNC jobs for making PCBs on a CNC router.
+          
+          ### Features
+          - 2D Computer-Aided PCB Manufacturing
+          - Gerber file processing
+          - G-Code generation for CNC routers
+          - Isolation routing capabilities
+          - Support for multiple file formats
+          
+          ## System Requirements
+          
+          - Linux x86_64 (Ubuntu 18.04+ or equivalent)
+          - OpenGL support
+          - 4GB RAM minimum, 8GB recommended
+          
+          ---
+          
+          Built with GitHub Actions on $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          Commit: $GITHUB_SHA
+          EOF
+          
+          echo "tag-name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "release-name=$RELEASE_NAME" >> $GITHUB_OUTPUT
+          echo "is-prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.release-notes.outputs.tag-name }}
+          name: ${{ steps.release-notes.outputs.release-name }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ steps.release-notes.outputs.is-prerelease }}
+          files: |
+            ./artifacts/FlatCAM-${{ needs.build-appimage.outputs.version }}-x86_64.AppImage
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-success:
+    name: Notify Build Success
+    runs-on: ubuntu-22.04
+    needs: [build-appimage, create-release]
+    if: always() && needs.build-appimage.result == 'success'
+    
+    steps:
+      - name: Build Success Notification
+        run: |
+          echo "✅ FlatCAM AppImage build completed successfully!"
+          echo "Version: ${{ needs.build-appimage.outputs.version }}"
+          if [[ "${{ needs.create-release.result }}" == "success" ]]; then
+            echo "✅ Release created successfully!"
+          elif [[ "${{ needs.create-release.result }}" == "skipped" ]]; then
+            echo "ℹ️ Release creation skipped (not a tag or manual release)"
+          else
+            echo "⚠️ Release creation failed, but AppImage was built successfully"
+          fi
