@@ -167,3 +167,10 @@ cython_debug/
 .idea/
 
 .vscode/
+
+# AppImage build artifacts
+publish/_build/
+publish/appimage/AppDir/
+publish/appimage/*.AppImage
+publish/appimage/FlatCAM_*.zip
+publish/appimage/pip-cache/
